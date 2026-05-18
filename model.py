@@ -19,6 +19,7 @@ import copy
 import os
 import gdown
 import spacy
+import spacy.cli
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -173,11 +174,21 @@ class Transformer(nn.Module):
             print("Weights loaded successfully.")
 
         # 4. Spacy
+# 4. Robust Spacy Loading
+        import spacy.cli
         try:
+            # Attempt 1: Load the full model
             self.spacy_de = spacy.load("de_core_news_sm")
         except:
-            os.system("python -m spacy download de_core_news_sm")
-            self.spacy_de = spacy.load("de_core_news_sm")
+            try:
+                # Attempt 2: Try downloading programmatically
+                spacy.cli.download("de_core_news_sm")
+                self.spacy_de = spacy.load("de_core_news_sm")
+            except:
+                # Attempt 3: Fallback to blank German model (Tokenizer only)
+                # This requires no download and prevents the OSError
+                print("Warning: Could not download de_core_news_sm. Falling back to blank 'de' model.")
+                self.spacy_de = spacy.blank("de")
 
     def encode(self, src, src_mask):
         return self.encoder(self.pos_enc(self.src_embed(src) * math.sqrt(self.d_model)), src_mask)
