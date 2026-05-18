@@ -86,6 +86,7 @@ def run_epoch(
     total_loss = 0
     
     for i, batch in enumerate(data_iter):
+        print(i)
         src = batch['src'].to(device)
         tgt = batch['tgt'].to(device)
         
@@ -212,9 +213,9 @@ def run_training_experiment():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # 1. Initialize W&B
-    wandb.init(project="da6401-a3-transformer", config={
+    wandb.init(project="da6401-A3", config={
         "d_model": 512, "n_layers": 6, "n_heads": 8, "d_ff": 2048,
-        "dropout": 0.1, "warmup_steps": 4000, "batch_size": 32, "epochs": 20
+        "dropout": 0.1, "warmup_steps": 4000, "batch_size": 64, "epochs": 20
     })
     cfg = wandb.config
 
@@ -243,6 +244,7 @@ def run_training_experiment():
 
     # 5. Training Loop
     for epoch in range(cfg.epochs):
+        print(epoch)
         train_loss = run_epoch(train_loader, model, loss_fn, optimizer, scheduler, epoch, True, device)
         val_loss = run_epoch(val_loader, model, loss_fn, None, None, epoch, False, device)
         
