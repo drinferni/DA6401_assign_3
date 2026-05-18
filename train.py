@@ -157,7 +157,10 @@ def evaluate_bleu(
     device: str = "cpu",
     max_len: int = 100,
 ) -> float:
-    from torchtext.data.metrics import bleu_score
+    # Use the functional version for a direct calculation
+    from torchmetrics.functional.text import bleu_score
+    import torch
+    
     model.eval()
     targets = []
     outputs = []
@@ -168,33 +171,51 @@ def evaluate_bleu(
             tgt = batch['tgt']
             
             for i in range(src.size(0)):
+                print(i)
                 s_src = src[i].unsqueeze(0)
+                # Ensure make_src_mask and greedy_decode are accessible in your scope
                 s_mask = make_src_mask(s_src).to(device)
                 
-                # SOS=2, EOS=3, PAD=1
+                # SOS=2, EOS=3, PAD=1 (Standard for most DL assignments)
                 res_indices = greedy_decode(model, s_src, s_mask, max_len, 2, 3, device)
-                res_indices = res_indices.squeeze(0).tolist()
                 
-                # Convert to tokens
+                if isinstance(res_indices, torch.Tensor):
+                    res_indices = res_indices.squeeze(0).tolist()
+                
+                # Convert to tokens (List of strings)
                 res_tokens = [tgt_vocab_inv[idx] for idx in res_indices if idx not in [1, 2, 3]]
                 outputs.append(res_tokens)
                 
+                # Targets must be a list of lists (because one hypothesis can have multiple references)
                 ref_indices = tgt[i].tolist()
                 ref_tokens = [tgt_vocab_inv[idx] for idx in ref_indices if idx not in [1, 2, 3]]
-                targets.append([ref_tokens])
+                targets.append([ref_tokens]) 
 
-    return bleu_score(outputs, targets) * 100
+    # bleu_score expects:
+    # preds: list of lists of tokens -> [['cat', 'sat'], ['dog', 'ran']]
+    # target: list of list of lists of tokens -> [[['cat', 'sat']], [['dog', 'ran']]]
+    
+    if len(outputs) == 0:
+        return 0.0
+        
+    score = bleu_score(outputs, targets)
+    return float(score) * 100
+
 
 # ══════════════════════════════════════════════════════════════════════
 #   CHECKPOINT UTILITIES  
 # ══════════════════════════════════════════════════════════════════════
 
-def save_checkpoint(model, optimizer, scheduler, epoch, path="checkpoint.pt"):
+# In train.py
+def save_checkpoint(model, optimizer, scheduler, epoch, dataset_obj, path="checkpoint.pt"):
     checkpoint = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
+        # YOU MUST ADD THESE TWO LINES:
+        'src_vocab': dataset_obj.src_vocab, 
+        'tgt_inv_vocab': dataset_obj.tgt_inv_vocab 
     }
     torch.save(checkpoint, path)
 
@@ -215,7 +236,7 @@ def run_training_experiment():
     # 1. Initialize W&B
     wandb.init(project="da6401-A3", config={
         "d_model": 512, "n_layers": 6, "n_heads": 8, "d_ff": 2048,
-        "dropout": 0.1, "warmup_steps": 4000, "batch_size": 64, "epochs": 20
+        "dropout": 0.1, "warmup_steps": 4000, "batch_size": 64, "epochs": 1
     })
     cfg = wandb.config
 
@@ -232,8 +253,6 @@ def run_training_experiment():
 
     # 3. Model
     model = Transformer(
-        src_vocab_size=len(train_data_obj.src_vocab),
-        tgt_vocab_size=len(train_data_obj.tgt_vocab),
         d_model=cfg.d_model, N=cfg.n_layers, num_heads=cfg.n_heads, d_ff=cfg.d_ff, dropout=cfg.dropout
     ).to(device)
 
@@ -251,16 +270,20 @@ def run_training_experiment():
         print(f"Epoch {epoch}: Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
         wandb.log({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
         
-        save_checkpoint(model, optimizer, scheduler, epoch)
+        save_checkpoint(model, optimizer, scheduler, epoch, train_data_obj)
 
     # 6. Final Evaluation
     test_data_obj = Multi30kDataset(split='test')
     test_data_obj.src_vocab, test_data_obj.tgt_vocab = train_data_obj.src_vocab, train_data_obj.tgt_vocab
     test_loader = DataLoader(test_data_obj.process_data(), batch_size=cfg.batch_size, collate_fn=collate_fn)
     
-    bleu = evaluate_bleu(model, test_loader, train_data_obj.tgt_inv_vocab, device)
-    print(f"Final Test BLEU: {bleu:.2f}")
-    wandb.log({"test_bleu": bleu})
+    # bleu = evaluate_bleu(model, test_loader, train_data_obj.tgt_inv_vocab, device)
+    # print(f"Final Test BLEU: {bleu:.2f}")
+    # wandb.log({"test_bleu": bleu})
 
 if __name__ == "__main__":
-    run_training_experiment()
+    # run_training_experiment()
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # print(device)
+    # model = Transformer().to(device)
+    # print(model.infer("danke"))
