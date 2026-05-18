@@ -29,6 +29,8 @@ from typing import Optional, Tuple
 #   STANDALONE ATTENTION & MASK HELPERS 
 # ══════════════════════════════════════════════════════════════════════
 
+
+
 def scaled_dot_product_attention(Q, K, V, mask=None):
     d_k = Q.size(-1)
     scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(d_k)
@@ -147,7 +149,7 @@ class Transformer(nn.Module):
         try:
             if not os.path.exists(checkpoint_path):
                 # Replace with your actual Drive ID
-                gdown.download(id="1F9R9FF_MbBYh29TrFJJIZ82K8mK-jr7V", output=checkpoint_path, quiet=False)
+                gdown.download(id="10NBoQ7857f8dzKInAQ8_iWtpNmOIJGDk", output=checkpoint_path, quiet=False)
             
             ckpt = torch.load(checkpoint_path, map_location='cpu')
             self.src_vocab = ckpt.get('src_vocab', {})
@@ -198,25 +200,68 @@ class Transformer(nn.Module):
 
     def forward(self, src, tgt, src_mask, tgt_mask):
         return self.decode(self.encode(src, src_mask), src_mask, tgt, tgt_mask)
+    
+    def greedy_decode(
+        self,
+        model,
+        src: torch.Tensor,
+        src_mask: torch.Tensor,
+        max_len: int,
+        start_symbol: int,
+        end_symbol: int,
+        device: str = "cpu",
+    ) -> torch.Tensor:
+        model.eval()
+        memory = model.encode(src, src_mask)
+        ys = torch.ones(1, 1).fill_(start_symbol).type(torch.long).to(device)
+        
+        for _ in range(max_len - 1):
+            tgt_mask = make_tgt_mask(ys).to(device)
+            out = model.decode(memory, src_mask, ys, tgt_mask)
+            prob = out[:, -1]
+            _, next_word = torch.max(prob, dim=1)
+            next_word = next_word.item()
+            
+            ys = torch.cat([ys, torch.ones(1, 1).type(torch.long).fill_(next_word).to(device)], dim=1)
+            if next_word == end_symbol:
+                break
+        return ys
+
 
     def infer(self, german_sentence: str) -> str:
         self.eval()
         device = next(self.parameters()).device
+        
+        # 1. Tokenize and convert to indices
+        # Using the same logic as your previous snippet
         tokens = [tok.text.lower() for tok in self.spacy_de.tokenizer(german_sentence)]
-        # SOS=2, EOS=3
+        
+        # SOS=2, EOS=3, PAD=1, UNK=0 (standard indices)
         src_indices = [2] + [self.src_vocab.get(t, 0) for t in tokens] + [3]
         src_tensor = torch.LongTensor([src_indices]).to(device)
+        
+        # 2. Create the source mask
         src_mask = make_src_mask(src_tensor).to(device)
         
+        # 3. Call the external greedy_decode function
+        # 'self' is passed as the model argument
         with torch.no_grad():
-            memory = self.encode(src_tensor, src_mask)
-            ys = torch.ones(1, 1).fill_(2).type(torch.long).to(device)
-            for _ in range(50):
-                out = self.decode(memory, src_mask, ys, make_tgt_mask(ys).to(device))
-                _, next_word = torch.max(out[:, -1], dim=1)
-                next_word = next_word.item()
-                ys = torch.cat([ys, torch.ones(1, 1).type(torch.long).fill_(next_word).to(device)], dim=1)
-                if next_word == 3: break
+            res_indices_tensor = self.greedy_decode(
+                model=self, 
+                src=src_tensor, 
+                src_mask=src_mask, 
+                max_len=1000, 
+                start_symbol=2, 
+                end_symbol=3, 
+                device=device
+            )
         
-        indices = ys.squeeze().tolist()
+        # 4. Convert resulting indices back to a list of strings
+        indices = res_indices_tensor.squeeze().tolist()
+        
+        # If indices is a single integer (case with 1 word), make it a list
+        if not isinstance(indices, list):
+            indices = [indices]
+            
+        # Filter out special tokens (PAD=1, SOS=2, EOS=3) and join
         return " ".join([self.tgt_inv_vocab.get(idx, str(idx)) for idx in indices if idx not in [1, 2, 3]])

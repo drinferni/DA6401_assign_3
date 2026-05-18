@@ -171,7 +171,6 @@ def evaluate_bleu(
             tgt = batch['tgt']
             
             for i in range(src.size(0)):
-                print(i)
                 s_src = src[i].unsqueeze(0)
                 # Ensure make_src_mask and greedy_decode are accessible in your scope
                 s_mask = make_src_mask(s_src).to(device)
@@ -274,7 +273,7 @@ def run_training_experiment():
     ).to(device)
 
     # 4. Optimization
-    optimizer = torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.1, betas=(0.9, 0.98), eps=1e-9)
     scheduler = NoamScheduler(optimizer, cfg.d_model, cfg.warmup_steps)
     loss_fn = LabelSmoothingLoss(len(train_data_obj.tgt_vocab), pad_idx=1, smoothing=0.1)
 
@@ -300,4 +299,4 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(device)
     model = Transformer().to(device)
-    print(model.infer("danke"))
+    print(model.infer("Bis zum nächsten Mal."))
