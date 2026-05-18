@@ -147,7 +147,7 @@ class Transformer(nn.Module):
         try:
             if not os.path.exists(checkpoint_path):
                 # Replace with your actual Drive ID
-                gdown.download(id="12nxRLJ6jYQtovU0BXUmF_FSk4ZxNyygT1", output=checkpoint_path, quiet=False)
+                gdown.download(id="1F9R9FF_MbBYh29TrFJJIZ82K8mK-jr7V", output=checkpoint_path, quiet=False)
             
             ckpt = torch.load(checkpoint_path, map_location='cpu')
             self.src_vocab = ckpt.get('src_vocab', {})

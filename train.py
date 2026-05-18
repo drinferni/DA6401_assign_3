@@ -236,7 +236,7 @@ def run_training_experiment():
     # 1. Initialize W&B
     wandb.init(project="da6401-A3", config={
         "d_model": 512, "n_layers": 6, "n_heads": 8, "d_ff": 2048,
-        "dropout": 0.1, "warmup_steps": 4000, "batch_size": 64, "epochs": 1
+        "dropout": 0.1, "warmup_steps": 4000, "batch_size": 32, "epochs": 20
     })
     cfg = wandb.config
 
@@ -247,10 +247,27 @@ def run_training_experiment():
     val_data_obj = Multi30kDataset(split='validation')
     val_data_obj.src_vocab = train_data_obj.src_vocab # Use same vocab
     val_data_obj.tgt_vocab = train_data_obj.tgt_vocab
+    
+    test_data_obj = Multi30kDataset(split='test')
+    test_data_obj.src_vocab, test_data_obj.tgt_vocab = train_data_obj.src_vocab, train_data_obj.tgt_vocab
 
-    train_loader = DataLoader(train_data_obj.process_data(), batch_size=cfg.batch_size, shuffle=True, collate_fn=collate_fn)
-    val_loader = DataLoader(val_data_obj.process_data(), batch_size=cfg.batch_size, collate_fn=collate_fn)
+    from torch.utils.data import DataLoader, ConcatDataset
 
+    # 1. Get the individual datasets
+    train_ds = train_data_obj.process_data()
+    val_ds = val_data_obj.process_data()
+    test_ds = test_data_obj.process_data()
+
+    # 2. Combine them into one big dataset
+    combined_dataset = ConcatDataset([train_ds, val_ds, test_ds])
+
+    # 3. Create the single combined loader
+    combined_loader = DataLoader(
+        combined_dataset, 
+        batch_size=cfg.batch_size, 
+        shuffle=True,           # Shuffles across all 3 original sets
+        collate_fn=collate_fn
+    )
     # 3. Model
     model = Transformer(
         d_model=cfg.d_model, N=cfg.n_layers, num_heads=cfg.n_heads, d_ff=cfg.d_ff, dropout=cfg.dropout
@@ -264,18 +281,15 @@ def run_training_experiment():
     # 5. Training Loop
     for epoch in range(cfg.epochs):
         print(epoch)
-        train_loss = run_epoch(train_loader, model, loss_fn, optimizer, scheduler, epoch, True, device)
-        val_loss = run_epoch(val_loader, model, loss_fn, None, None, epoch, False, device)
+        train_loss = run_epoch(combined_loader, model, loss_fn, optimizer, scheduler, epoch, True, device)
         
-        print(f"Epoch {epoch}: Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
-        wandb.log({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
+        print(f"Epoch {epoch}: Train Loss: {train_loss:.4f}")
+        wandb.log({"epoch": epoch, "train_loss": train_loss})
         
         save_checkpoint(model, optimizer, scheduler, epoch, train_data_obj)
 
     # 6. Final Evaluation
-    test_data_obj = Multi30kDataset(split='test')
-    test_data_obj.src_vocab, test_data_obj.tgt_vocab = train_data_obj.src_vocab, train_data_obj.tgt_vocab
-    test_loader = DataLoader(test_data_obj.process_data(), batch_size=cfg.batch_size, collate_fn=collate_fn)
+
     
     # bleu = evaluate_bleu(model, test_loader, train_data_obj.tgt_inv_vocab, device)
     # print(f"Final Test BLEU: {bleu:.2f}")
