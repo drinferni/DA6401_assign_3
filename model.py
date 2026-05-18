@@ -147,7 +147,7 @@ class Transformer(nn.Module):
         try:
             if not os.path.exists(checkpoint_path):
                 # Replace with your actual Drive ID
-                gdown.download(id="12nxRLJ6jYQtovU0BXUmF_FSk4ZxNyygT", output=checkpoint_path, quiet=False)
+                gdown.download(id="12nxRLJ6jYQtovU0BXUmF_FSk4ZxNyygT1", output=checkpoint_path, quiet=False)
             
             ckpt = torch.load(checkpoint_path, map_location='cpu')
             self.src_vocab = ckpt.get('src_vocab', {})
@@ -211,7 +211,7 @@ class Transformer(nn.Module):
         with torch.no_grad():
             memory = self.encode(src_tensor, src_mask)
             ys = torch.ones(1, 1).fill_(2).type(torch.long).to(device)
-            for _ in range(100):
+            for _ in range(10):
                 out = self.decode(memory, src_mask, ys, make_tgt_mask(ys).to(device))
                 _, next_word = torch.max(out[:, -1], dim=1)
                 next_word = next_word.item()
