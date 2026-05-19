@@ -31,13 +31,7 @@ class NoamScheduler(LRScheduler):
         last_epoch       (int)  : The index of the last epoch. Default: -1.
     """
 
-    def __init__(
-        self,
-        optimizer: optim.Optimizer,
-        d_model: int,
-        warmup_steps: int,
-        last_epoch: int = -1,
-    ) -> None:
+    def __init__(self,optimizer,d_model,warmup_steps,last_epoch= -1,) -> None:
         self.d_model = d_model
         self.warmup_steps = warmup_steps
         super().__init__(optimizer, last_epoch)
@@ -54,9 +48,6 @@ class NoamScheduler(LRScheduler):
             step = self.last_epoch + 1            # avoid step=0
             scale = d_model^(-0.5) * min(step^(-0.5), step * warmup_steps^(-1.5))
         """
-        # Step count must be at least 1 to avoid division by zero in step^(-0.5)
-        # last_epoch starts at -1; during the first scheduler.step(), it becomes 0.
-        # We treat step 1 as the first active training step.
         step = max(1, self.last_epoch + 1)
         
         arg1 = step ** -0.5
@@ -86,11 +77,7 @@ class NoamScheduler(LRScheduler):
 # Helper — do NOT modify
 # ──────────────────────────────────────────────────────────────────────
 
-def get_lr_history(
-    d_model: int,
-    warmup_steps: int,
-    total_steps: int,
-) -> list[float]:
+def get_lr_history(d_model,warmup_steps,total_steps):
     """
     Simulate the LR trajectory of NoamScheduler for `total_steps` steps.
 
@@ -119,21 +106,21 @@ def get_lr_history(
 # Quick visual check — run:  python noam_lr_scheduler.py
 # ──────────────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
+# if __name__ == "__main__":
+#     import matplotlib.pyplot as plt
 
-    D_MODEL      = 512
-    WARMUP_STEPS = 4000
-    TOTAL_STEPS  = 20_000
+#     D_MODEL      = 512
+#     WARMUP_STEPS = 4000
+#     TOTAL_STEPS  = 20_000
 
-    lrs = get_lr_history(D_MODEL, WARMUP_STEPS, TOTAL_STEPS)
+#     lrs = get_lr_history(D_MODEL, WARMUP_STEPS, TOTAL_STEPS)
 
-    plt.figure(figsize=(9, 4))
-    plt.plot(lrs)
-    plt.axvline(WARMUP_STEPS, color="red", linestyle="--", label=f"warmup={WARMUP_STEPS}")
-    plt.xlabel("Step")
-    plt.ylabel("Learning Rate")
-    plt.title(f"Noam LR Schedule  (d_model={D_MODEL})")
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
+#     plt.figure(figsize=(9, 4))
+#     plt.plot(lrs)
+#     plt.axvline(WARMUP_STEPS, color="red", linestyle="--", label=f"warmup={WARMUP_STEPS}")
+#     plt.xlabel("Step")
+#     plt.ylabel("Learning Rate")
+#     plt.title(f"Noam LR Schedule  (d_model={D_MODEL})")
+#     plt.legend()
+#     plt.tight_layout()
+#     plt.show()

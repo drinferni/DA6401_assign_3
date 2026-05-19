@@ -124,17 +124,7 @@ class Decoder(nn.Module):
 # ══════════════════════════════════════════════════════════════════════
 
 class Transformer(nn.Module):
-    def __init__(
-        self,
-        src_vocab_size: Optional[int] = None,
-        tgt_vocab_size: Optional[int] = None,
-        d_model:   int   = 512,
-        N:         int   = 6,
-        num_heads: int   = 8,
-        d_ff:      int   = 2048,
-        dropout:   float = 0.1,
-        checkpoint_path: str = "checkpoint.pt",
-    ) -> None:
+    def __init__(self,src_vocab_size: Optional[int] = None,tgt_vocab_size: Optional[int] = None,d_model= 512,N = 6,num_heads = 8,d_ff = 2048,dropout = 0.1,checkpoint_path: str = "checkpoint.pt") :
         super().__init__()
         
         self.src_vocab = {}
@@ -145,24 +135,20 @@ class Transformer(nn.Module):
         s_size = src_vocab_size if src_vocab_size else 7853
         t_size = tgt_vocab_size if tgt_vocab_size else 5893
 
-        # 1. Try to Load Checkpoint
         try:
             if not os.path.exists(checkpoint_path):
-                # Replace with your actual Drive ID
                 gdown.download(id="1C8YWjczTenNdRDbfRYWvioNndc1zM_24", output=checkpoint_path, quiet=False)
             
             ckpt = torch.load(checkpoint_path, map_location='cpu')
             self.src_vocab = ckpt.get('src_vocab', {})
             self.tgt_inv_vocab = ckpt.get('tgt_inv_vocab', {})
             
-            # If vocab found in checkpoint, update sizes
             if self.src_vocab: s_size = len(self.src_vocab)
             if self.tgt_inv_vocab: t_size = len(self.tgt_inv_vocab)
             print("Checkpoint found. Loading architecture with extracted vocab sizes.")
         except Exception:
             print("No checkpoint found or download failed. Initializing with provided/default sizes.")
 
-        # 2. Build Architecture
         self.src_embed = nn.Embedding(s_size, d_model)
         self.tgt_embed = nn.Embedding(t_size, d_model)
         self.pos_enc = PositionalEncoding(d_model, dropout)
@@ -170,25 +156,18 @@ class Transformer(nn.Module):
         self.decoder = Decoder(DecoderLayer(d_model, num_heads, d_ff, dropout), N)
         self.fc_out = nn.Linear(d_model, t_size)
 
-        # 3. Load Weights (if ckpt was loaded successfully)
         if 'ckpt' in locals() and 'model_state_dict' in ckpt:
             self.load_state_dict(ckpt['model_state_dict'])
             print("Weights loaded successfully.")
 
-        # 4. Spacy
-# 4. Robust Spacy Loading
         import spacy.cli
         try:
-            # Attempt 1: Load the full model
             self.spacy_de = spacy.load("de_core_news_sm")
         except:
             try:
-                # Attempt 2: Try downloading programmatically
                 spacy.cli.download("de_core_news_sm")
                 self.spacy_de = spacy.load("de_core_news_sm")
             except:
-                # Attempt 3: Fallback to blank German model (Tokenizer only)
-                # This requires no download and prevents the OSError
                 print("Warning: Could not download de_core_news_sm. Falling back to blank 'de' model.")
                 self.spacy_de = spacy.blank("de")
 
@@ -201,16 +180,7 @@ class Transformer(nn.Module):
     def forward(self, src, tgt, src_mask, tgt_mask):
         return self.decode(self.encode(src, src_mask), src_mask, tgt, tgt_mask)
     
-    def greedy_decode(
-        self,
-        model,
-        src: torch.Tensor,
-        src_mask: torch.Tensor,
-        max_len: int,
-        start_symbol: int,
-        end_symbol: int,
-        device: str = "cpu",
-    ) -> torch.Tensor:
+    def greedy_decode(self,model,src,src_mask,max_len,start_symbol,end_symbol,device= "cpu") :
         model.eval()
         memory = model.encode(src, src_mask)
         ys = torch.ones(1, 1).fill_(start_symbol).type(torch.long).to(device)
@@ -228,40 +198,21 @@ class Transformer(nn.Module):
         return ys
 
 
-    def infer(self, german_sentence: str) -> str:
+    def infer(self, german_sentence) :
         self.eval()
         device = next(self.parameters()).device
         
-        # 1. Tokenize and convert to indices
-        # Using the same logic as your previous snippet
         tokens = [tok.text.lower() for tok in self.spacy_de.tokenizer(german_sentence)]
         
-        # SOS=2, EOS=3, PAD=1, UNK=0 (standard indices)
         src_indices = [2] + [self.src_vocab.get(t, 0) for t in tokens] + [3]
         src_tensor = torch.LongTensor([src_indices]).to(device)
-        
-        # 2. Create the source mask
+
         src_mask = make_src_mask(src_tensor).to(device)
-        
-        # 3. Call the external greedy_decode function
-        # 'self' is passed as the model argument
+    
         with torch.no_grad():
-            res_indices_tensor = self.greedy_decode(
-                model=self, 
-                src=src_tensor, 
-                src_mask=src_mask, 
-                max_len=1000, 
-                start_symbol=2, 
-                end_symbol=3, 
-                device=device
-            )
-        
-        # 4. Convert resulting indices back to a list of strings
+            res_indices_tensor = self.greedy_decode(model=self, src=src_tensor, src_mask=src_mask, max_len=1000, start_symbol=2, end_symbol=3, device=device)
+
         indices = res_indices_tensor.squeeze().tolist()
-        
-        # If indices is a single integer (case with 1 word), make it a list
         if not isinstance(indices, list):
             indices = [indices]
-            
-        # Filter out special tokens (PAD=1, SOS=2, EOS=3) and join
         return " ".join([self.tgt_inv_vocab.get(idx, str(idx)) for idx in indices if idx not in [1, 2, 3]])

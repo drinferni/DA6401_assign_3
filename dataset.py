@@ -9,19 +9,13 @@ class Multi30kDataset:
         Loads the Multi30k dataset and prepares tokenizers.
         """
         self.split = split
-        
-        # Load dataset from Hugging Face
-        # Dataset contains 'en' and 'de' keys within each 'pair'
         self.raw_data = load_dataset("bentrevett/multi30k", split=self.split)
-        
-        # Load spacy tokenizers
         try:
             self.spacy_de = spacy.load("de_core_news_sm")
             self.spacy_en = spacy.load("en_core_web_sm")
         except OSError:
             raise OSError("Spacy models not found. Run: python -m spacy download de_core_news_sm en_core_web_sm")
 
-        # Special tokens
         self.special_tokens = ['<unk>', '<pad>', '<sos>', '<eos>']
         self.unk_idx = 0
         self.pad_idx = 1
@@ -44,11 +38,6 @@ class Multi30kDataset:
         Builds the vocabulary mapping for src (de) and tgt (en).
         Only use the training split to build the vocabulary.
         """
-        # Note: In a real scenario, you'd only build vocab from the 'train' split
-        # but the class is initialized per split. 
-        # If this is called on a test split, it will build vocab from test (not ideal),
-        # but usually, you'd pass the vocab from the training instance.
-        
         src_counter = Counter()
         tgt_counter = Counter()
 
@@ -56,11 +45,9 @@ class Multi30kDataset:
             src_counter.update(self._tokenize_de(item['de']))
             tgt_counter.update(self._tokenize_en(item['en']))
 
-        # Initialize with special tokens
         self.src_vocab = {token: i for i, token in enumerate(self.special_tokens)}
         self.tgt_vocab = {token: i for i, token in enumerate(self.special_tokens)}
 
-        # Add words that meet min_freq
         for word, freq in src_counter.items():
             if freq >= min_freq and word not in self.src_vocab:
                 self.src_vocab[word] = len(self.src_vocab)
@@ -69,7 +56,6 @@ class Multi30kDataset:
             if freq >= min_freq and word not in self.tgt_vocab:
                 self.tgt_vocab[word] = len(self.tgt_vocab)
 
-        # Reverse mappings
         self.src_inv_vocab = {i: token for token, i in self.src_vocab.items()}
         self.tgt_inv_vocab = {i: token for token, i in self.tgt_vocab.items()}
 
@@ -86,13 +72,11 @@ class Multi30kDataset:
         processed_data = []
 
         for item in self.raw_data:
-            # Tokenize and numericalize source
             src_tokens = self._tokenize_de(item['de'])
             src_indices = [self.sos_idx] + \
                           [self.src_vocab.get(token, self.unk_idx) for token in src_tokens] + \
                           [self.eos_idx]
 
-            # Tokenize and numericalize target
             tgt_tokens = self._tokenize_en(item['en'])
             tgt_indices = [self.sos_idx] + \
                           [self.tgt_vocab.get(token, self.unk_idx) for token in tgt_tokens] + \
